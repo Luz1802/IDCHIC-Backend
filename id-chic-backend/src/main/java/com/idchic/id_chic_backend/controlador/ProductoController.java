@@ -1,6 +1,9 @@
 package com.idchic.id_chic_backend.controlador;
 
 import com.idchic.id_chic_backend.modelo.Producto;
+import com.idchic.id_chic_backend.modelo.CarritoItem;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -8,7 +11,13 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api")
-@CrossOrigin(origins = {"http://127.0.0.1:5500", "http://127.0.0.1:3000"}) // Ajusta según tu Live Server
+// Permitir peticiones desde los puertos usados por el frontend
+@CrossOrigin(origins = {
+        "http://localhost:5500",
+        "http://localhost:3000",
+        "http://127.0.0.1:5500",
+        "http://127.0.0.1:3000"
+})
 public class ProductoController {
 
     private List<Producto> productos = new ArrayList<>(List.of(
@@ -49,15 +58,83 @@ public class ProductoController {
             new Producto("PI010", "Pin Marvel", 5000, 12, "./images/Pines/10.jpg")
     ));
 
+    private List<CarritoItem> carrito = new ArrayList<>();
+
     // Endpoint para listar productos
     @GetMapping("/productos")
     public List<Producto> listarProductos() {
         return productos;
     }
 
-    // Endpoint para agregar al carrito (simulado)
-    @PostMapping("/carrito")
-    public String agregarAlCarrito(@RequestBody Producto producto) {
-        return "✅ " + producto.getNombre() + " agregado al carrito en el backend.";
+    // Endpoint para obtener el carrito
+    @GetMapping("/carrito")
+    public List<CarritoItem> obtenerCarrito() {
+        return carrito;
+    }
+
+    // Endpoint para agregar productos al carrito
+    @PostMapping("/carrito/{codigo}")
+    public ResponseEntity<?> agregarAlCarrito(@PathVariable String codigo, @RequestParam(defaultValue = "1") int cantidad) {
+        Producto producto = buscarProducto(codigo);
+        if (producto == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Producto no encontrado");
+        }
+        if (producto.getStock() < cantidad) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Stock insuficiente");
+        }
+        producto.setStock(producto.getStock() - cantidad);
+        CarritoItem item = buscarItemEnCarrito(codigo);
+        if (item != null) {
+            item.setCantidad(item.getCantidad() + cantidad);
+        } else {
+            item = new CarritoItem(producto, cantidad);
+            carrito.add(item);
+        }
+        return ResponseEntity.ok(item);
+    }
+
+    // Endpoint para eliminar productos del carrito
+    @DeleteMapping("/carrito/{codigo}")
+    public ResponseEntity<?> eliminarDelCarrito(@PathVariable String codigo, @RequestParam(defaultValue = "1") int cantidad) {
+        CarritoItem item = buscarItemEnCarrito(codigo);
+        if (item == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Producto no está en el carrito");
+        }
+        Producto producto = item.getProducto();
+        if (cantidad >= item.getCantidad()) {
+            producto.setStock(producto.getStock() + item.getCantidad());
+            carrito.remove(item);
+        } else {
+            item.setCantidad(item.getCantidad() - cantidad);
+            producto.setStock(producto.getStock() + cantidad);
+        }
+        return ResponseEntity.ok(item);
+    }
+
+    // Endpoint para vaciar completamente el carrito
+    @DeleteMapping("/carrito")
+    public ResponseEntity<Void> vaciarCarrito() {
+        carrito.forEach(i -> {
+            Producto producto = i.getProducto();
+            producto.setStock(producto.getStock() + i.getCantidad());
+        });
+        carrito.clear();
+        return ResponseEntity.ok().build();
+    }
+
+    // Busca un producto por código
+    private Producto buscarProducto(String codigo) {
+        return productos.stream()
+                .filter(p -> p.getCodigo().equals(codigo))
+                .findFirst()
+                .orElse(null);
+    }
+
+    // Busca un ítem del carrito por código de producto
+    private CarritoItem buscarItemEnCarrito(String codigo) {
+        return carrito.stream()
+                .filter(i -> i.getProducto().getCodigo().equals(codigo))
+                .findFirst()
+                .orElse(null);
     }
 }
