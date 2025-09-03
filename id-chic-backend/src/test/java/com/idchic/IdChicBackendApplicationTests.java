@@ -1,4 +1,4 @@
-package com.idchic.id_chic_backend;
+package com.idchic;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
